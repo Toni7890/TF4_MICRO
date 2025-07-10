@@ -1,0 +1,12 @@
+#include "Software_I2C.h"
+#include <xc.h>
+
+void SW_I2C_Init(void) { SCL_DIR = 1; SDA_DIR = 1; }
+void SW_I2C_Start(void) { SDA_DIR = 1; SCL_DIR = 1; __delay_us(4); SDA_DIR = 0; SDA_PIN = 0; __delay_us(4); SCL_DIR = 0; SCL_PIN = 0;}
+void SW_I2C_Stop(void) { SDA_DIR = 0; SDA_PIN = 0; __delay_us(4); SCL_DIR = 1; __delay_us(4); SDA_DIR = 1; }
+void SW_I2C_Restart(void) { SCL_DIR = 0; SCL_PIN = 0; SDA_DIR = 1; __delay_us(4); SCL_DIR = 1; __delay_us(4); SDA_DIR = 0; SDA_PIN = 0; __delay_us(4); SCL_DIR = 0; SCL_PIN = 0;}
+uint8_t SW_I2C_Read(bool ack) { uint8_t data = 0; SDA_DIR = 1; for (int i = 0; i < 8; i++) { data <<= 1; SCL_DIR = 1; __delay_us(2); if (SDA_PORT_READ) data |= 1; __delay_us(2); SCL_DIR = 0; SCL_PIN = 0; __delay_us(4); } SDA_DIR = 0; SDA_PIN = ack ? 0 : 1; __delay_us(1); SCL_DIR = 1; __delay_us(4); SCL_DIR = 0; SCL_PIN = 0; return data; }
+sw_i2c_error_t SW_I2C_Write(uint8_t data) { SDA_DIR = 0; for (int i = 0; i < 8; i++) { SDA_PIN = (data & 0x80) ? 1 : 0; data <<= 1; __delay_us(1); SCL_DIR = 1; __delay_us(4); SCL_DIR = 0; SCL_PIN = 0; } SDA_DIR = 1; SCL_DIR = 1; __delay_us(2); bool nack = SDA_PORT_READ; __delay_us(2); SCL_DIR = 0; SCL_PIN = 0; return nack ? SW_I2C_NACK : SW_I2C_SUCCESS; }
+bool SW_I2C_WriteRegister(uint8_t device_addr, uint8_t reg, uint8_t data) { SW_I2C_Start(); if (SW_I2C_Write(device_addr << 1) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } if (SW_I2C_Write(reg) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } if (SW_I2C_Write(data) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } SW_I2C_Stop(); return true; }
+uint8_t SW_I2C_ReadRegister(uint8_t device_addr, uint8_t reg) { uint8_t data; SW_I2C_Start(); if (SW_I2C_Write(device_addr << 1) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return 0; } if (SW_I2C_Write(reg) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return 0; } SW_I2C_Restart(); if (SW_I2C_Write((device_addr << 1) | 1) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return 0; } data = SW_I2C_Read(false); SW_I2C_Stop(); return data; }
+bool SW_I2C_ReadRegisters(uint8_t device_addr, uint8_t reg, uint8_t count, uint8_t *dest) { SW_I2C_Start(); if (SW_I2C_Write(device_addr << 1) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } if (SW_I2C_Write(reg) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } SW_I2C_Restart(); if (SW_I2C_Write((device_addr << 1) | 1) != SW_I2C_SUCCESS) { SW_I2C_Stop(); return false; } for (uint8_t i = 0; i < count; i++) { dest[i] = SW_I2C_Read(i < (count - 1)); } SW_I2C_Stop(); return true; }
